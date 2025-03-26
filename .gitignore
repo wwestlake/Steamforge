@@ -1,0 +1,31 @@
+/Binaries/*
+/DerivedDataCache/*
+/Intermediate/*
+/Saved/*
+/.vscode
+.vs
+*.sln
+*.opensdf
+*.sdf
+*.suo
+*.VC.db
+*.VC.opendb
+*.log
+*.tmp
+*.cache
+*.obj
+*.pdb
+*.idb
+*.tlog
+*.ipch
+*.aps
+*.ncb
+*.db
+*.sbr
+*.scc
+*.user
+*.sln.docstates
+
+# Ignore content directory
+/Content/*
+!Content/README.md   # (Optional: if you want to leave a note)
