@@ -157,6 +157,10 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Time")
     const FGameDateTime& GetCurrentDateTime() const { return CurrentTime; }
 
+    UFUNCTION(BlueprintCallable, Category = "Time")
+    FString GetCurrentTimeString() const { return CurrentTime.ToString(); }
+
+
 protected:
     virtual void BeginPlay() override;
 
