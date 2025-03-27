@@ -1,60 +1,28 @@
-// ItemActor.h
+#include "ItemActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "GameplayTagContainer.h"
 
-#pragma once
-
-#include "CoreMinimal.h"
-#include "GameFramework/Actor.h"
-#include "Engine/DataTable.h"
-#include "ItemSystemCore.h" // includes EItemType, FItemMetadata, etc.
-#include "ItemActor.generated.h"
-
-UCLASS(Abstract)
-class STEAMFORGE_API AItemActor : public AActor
+AItemActor::AItemActor()
 {
-    GENERATED_BODY()
+    PrimaryActorTick.bCanEverTick = false;
 
-public:
-    AItemActor();
+    // Optional: Basic mesh root setup (if not already done in header)
+    MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComponent"));
+    RootComponent = MeshComponent;
 
-protected:
-    virtual void BeginPlay() override;
+    // Optional: Default tags setup
+    ItemTags = FGameplayTagContainer();
 
-    // Load metadata when placed or spawned
-    void LoadMetadata();
+    // Logging for debug
+    UE_LOG(LogTemp, Log, TEXT("ItemActor constructed."));
+}
 
-public:
-    /** Unique identifier for item, used to look up metadata */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-    FName ItemID;
+void AItemActor::BeginPlay()
+{
+    Super::BeginPlay();
 
-    /** Reference to the item metadata data table */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-    UDataTable* ItemMetadataTable;
-
-    /** Cached metadata loaded from table at runtime */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Item")
-    FItemMetadata ItemMetadata;
-
-    /** Returns true if metadata was successfully loaded */
-    UFUNCTION(BlueprintCallable, Category = "Item")
-    bool HasValidMetadata() const { return bMetadataLoaded; }
-
-    /** Accessor for name */
-    UFUNCTION(BlueprintCallable, Category = "Item")
-    FText GetItemName() const { return ItemMetadata.DisplayName; }
-
-    /** Accessor for description */
-    UFUNCTION(BlueprintCallable, Category = "Item")
-    FText GetItemDescription() const { return ItemMetadata.Description; }
-
-    /** Accessor for icon */
-    UFUNCTION(BlueprintCallable, Category = "Item")
-    TSoftObjectPtr<UTexture2D> GetItemIcon() const { return ItemMetadata.Icon; }
-
-    /** Accessor for type */
-    UFUNCTION(BlueprintCallable, Category = "Item")
-    EItemType GetItemType() const { return ItemMetadata.ItemType; }
-
-private:
-    bool bMetadataLoaded = false;
-};
+    // Example debug
+    UE_LOG(LogTemp, Log, TEXT("ItemActor BeginPlay: Tags [%s]"),
+        *ItemTags.ToStringSimple());
+}
