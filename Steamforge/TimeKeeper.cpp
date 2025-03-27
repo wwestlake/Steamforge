@@ -1,8 +1,9 @@
+// TimeKeeper.cpp
+
 #include "TimeKeeper.h"
-#include "Engine/World.h"
-#include "Engine/DataTable.h"
-#include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
+#include "SteamforgeSaveGame.h" // Ensure this is your save game class header
 
 ATimeKeeper::ATimeKeeper()
 {
@@ -12,7 +13,10 @@ ATimeKeeper::ATimeKeeper()
 void ATimeKeeper::BeginPlay()
 {
     Super::BeginPlay();
+
+    LoadGameTime();
     LoadTimeMarkers();
+
     UE_LOG(LogTemp, Log, TEXT("TimeKeeper Initialized: %s"), *CurrentTime.ToString());
 }
 
@@ -49,6 +53,8 @@ void ATimeKeeper::LoadTimeMarkers()
             LoadedTimeMarkers.Add(*Row);
         }
     }
+
+    UE_LOG(LogTemp, Log, TEXT("Loaded %d Time Marker Events"), LoadedTimeMarkers.Num());
 }
 
 void ATimeKeeper::ProcessTimeEvents()
@@ -72,63 +78,32 @@ void ATimeKeeper::ProcessTimeEvents()
         if (bShouldFire)
         {
             OnTimeMarker.Broadcast(Marker.EventID);
-            UE_LOG(LogTemp, Log, TEXT("Time Event Triggered: %s at %02d:%02d"), *Marker.EventName, Marker.Hour, Marker.Minute);
+            UE_LOG(LogTemp, Log, TEXT("Time Event Triggered: %s (%s) at %02d:%02d"),
+                *Marker.EventID.ToString(), *Marker.EventName, Marker.Hour, Marker.Minute);
         }
     }
 }
 
-// --- FGameDateTime Implementation ---
-
-void FGameDateTime::AdvanceTime(float GameSeconds)
+void ATimeKeeper::SaveGameTime()
 {
-    AccumulatedTime += GameSeconds;
-    int32 TotalMinutesToAdd = static_cast<int32>(AccumulatedTime / 60.0f);
-    AccumulatedTime -= TotalMinutesToAdd * 60.0f;
+    USteamforgeSaveGame* SaveGameInstance = Cast<USteamforgeSaveGame>(UGameplayStatics::CreateSaveGameObject(USteamforgeSaveGame::StaticClass()));
+    if (!SaveGameInstance) return;
 
-    Minute += TotalMinutesToAdd;
-    while (Minute >= MinutesPerHour)
-    {
-        Minute -= MinutesPerHour;
-        Hour++;
-    }
+    SaveGameInstance->SavedTime = CurrentTime;
+    UGameplayStatics::SaveGameToSlot(SaveGameInstance, TEXT("TimeSaveSlot"), 0);
 
-    while (Hour >= HoursPerDay)
-    {
-        Hour -= HoursPerDay;
-        AdvanceOneDay();
-    }
+    UE_LOG(LogTemp, Log, TEXT("Game Time Saved: %s"), *CurrentTime.ToString());
 }
 
-void FGameDateTime::AdvanceOneDay()
+void ATimeKeeper::LoadGameTime()
 {
-    DayOfMonth++;
-    DayOfWeek = static_cast<EGameDay>((static_cast<uint8>(DayOfWeek) + 1) % DaysPerWeek);
-
-    if (DayOfMonth > DaysPerMonth)
+    if (UGameplayStatics::DoesSaveGameExist(TEXT("TimeSaveSlot"), 0))
     {
-        DayOfMonth = 1;
-        Month = static_cast<EGameMonth>((static_cast<uint8>(Month) + 1) % MonthsPerYear);
-
-        if (Month == EGameMonth::Kindlemoon)
+        USteamforgeSaveGame* LoadedGame = Cast<USteamforgeSaveGame>(UGameplayStatics::LoadGameFromSlot(TEXT("TimeSaveSlot"), 0));
+        if (LoadedGame)
         {
-            Year++;
+            CurrentTime = LoadedGame->SavedTime;
+            UE_LOG(LogTemp, Log, TEXT("Game Time Loaded: %s"), *CurrentTime.ToString());
         }
     }
-}
-
-FString FGameDateTime::GetFormattedTime() const
-{
-    FString Suffix = (Hour >= 12) ? TEXT("PM") : TEXT("AM");
-    int32 DisplayHour = (Hour == 0) ? 12 : (Hour > 12 ? Hour - 12 : Hour);
-    return FString::Printf(TEXT("%02d:%02d %s"), DisplayHour, Minute, *Suffix);
-}
-
-FString FGameDateTime::ToString() const
-{
-    const UEnum* DayEnum = StaticEnum<EGameDay>();
-    const UEnum* MonthEnum = StaticEnum<EGameMonth>();
-    FString DayStr = DayEnum ? DayEnum->GetDisplayNameTextByValue((int64)DayOfWeek).ToString() : TEXT("UnknownDay");
-    FString MonthStr = MonthEnum ? MonthEnum->GetDisplayNameTextByValue((int64)Month).ToString() : TEXT("UnknownMonth");
-
-    return FString::Printf(TEXT("%s, %d of %s, Year %d - %s"), *DayStr, DayOfMonth, *MonthStr, Year, *GetFormattedTime());
 }

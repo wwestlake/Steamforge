@@ -1,8 +1,12 @@
+// TimeKeeper.h
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Engine/DataTable.h"
+#include "GameFramework/SaveGame.h"
+#include "UObject/NoExportTypes.h"
 #include "TimeKeeper.generated.h"
 
 UENUM(BlueprintType)
@@ -43,32 +47,33 @@ struct FGameDateTime
 {
     GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
     EGameDay DayOfWeek = EGameDay::Sparkday;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
     int32 DayOfMonth = 1;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
     EGameMonth Month = EGameMonth::Kindlemoon;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
     int32 Year = 731;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
     int32 Hour = 6;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
     int32 Minute = 0;
 
+    UPROPERTY(SaveGame)
     float AccumulatedTime = 0.0f;
 
-    static constexpr int32 MinutesPerDay = 1440;
-    static constexpr int32 HoursPerDay = 24;
-    static constexpr int32 MinutesPerHour = 60;
-    static constexpr int32 DaysPerMonth = 28;
-    static constexpr int32 MonthsPerYear = 8;
-    static constexpr int32 DaysPerWeek = 6;
+    static const int32 MinutesPerDay;
+    static const int32 HoursPerDay;
+    static const int32 MinutesPerHour;
+    static const int32 DaysPerMonth;
+    static const int32 MonthsPerYear;
+    static const int32 DaysPerWeek;
 
     void AdvanceTime(float GameSeconds);
     void AdvanceOneDay();
@@ -127,6 +132,16 @@ struct FTimeEventMetadata : public FTableRowBase
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimeMarkerEvent, FName, EventID);
 
 UCLASS()
+class STEAMFORGE_API USteamforgeSaveGame : public USaveGame
+{
+    GENERATED_BODY()
+
+public:
+    UPROPERTY(BlueprintReadWrite, SaveGame)
+    FGameDateTime SavedTime;
+};
+
+UCLASS()
 class STEAMFORGE_API ATimeKeeper : public AActor
 {
     GENERATED_BODY()
@@ -152,14 +167,16 @@ public:
     FOnTimeMarkerEvent OnTimeMarker;
 
     UFUNCTION(BlueprintCallable, Category = "Time")
-    FString GetCurrentTimeString() const { return CurrentTime.ToString(); }
+    FString GetCurrentTimeString() const;
 
     UFUNCTION(BlueprintCallable, Category = "Time")
     const FGameDateTime& GetCurrentDateTime() const { return CurrentTime; }
 
     UFUNCTION(BlueprintCallable, Category = "Time")
-    FString GetCurrentTimeString() const { return CurrentTime.ToString(); }
+    void SaveGameTime();
 
+    UFUNCTION(BlueprintCallable, Category = "Time")
+    void LoadGameTime();
 
 protected:
     virtual void BeginPlay() override;
