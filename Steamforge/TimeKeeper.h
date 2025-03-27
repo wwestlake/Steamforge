@@ -132,16 +132,6 @@ struct FTimeEventMetadata : public FTableRowBase
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimeMarkerEvent, FName, EventID);
 
 UCLASS()
-class STEAMFORGE_API USteamforgeSaveGame : public USaveGame
-{
-    GENERATED_BODY()
-
-public:
-    UPROPERTY(BlueprintReadWrite, SaveGame)
-    FGameDateTime SavedTime;
-};
-
-UCLASS()
 class STEAMFORGE_API ATimeKeeper : public AActor
 {
     GENERATED_BODY()
