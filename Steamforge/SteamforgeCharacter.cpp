@@ -1,158 +1,140 @@
-#include "TimeKeeper.h"
-#include "Engine/World.h"
-#include "Engine/DataTable.h"
-#include "Engine/Engine.h"
-#include "Kismet/GameplayStatics.h"
-#include "SteamforgeSaveGame.h"
+// Copyright Epic Games, Inc. All Rights Reserved.
 
-ATimeKeeper::ATimeKeeper()
+#include "SteamforgeCharacter.h"
+#include "HeadMountedDisplayFunctionLibrary.h"
+#include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/InputComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/SpringArmComponent.h"
+
+//////////////////////////////////////////////////////////////////////////
+// ASteamforgeCharacter
+
+ASteamforgeCharacter::ASteamforgeCharacter()
 {
-    PrimaryActorTick.bCanEverTick = true;
+	// Set size for collision capsule
+	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
+
+	// set our turn rates for input
+	BaseTurnRate = 45.f;
+	BaseLookUpRate = 45.f;
+
+	// Don't rotate when the controller rotates. Let that just affect the camera.
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
+
+	// Configure character movement
+	GetCharacterMovement()->bOrientRotationToMovement = true; // Character moves in the direction of input...	
+	GetCharacterMovement()->RotationRate = FRotator(0.0f, 540.0f, 0.0f); // ...at this rotation rate
+	GetCharacterMovement()->JumpZVelocity = 600.f;
+	GetCharacterMovement()->AirControl = 0.2f;
+
+	// Create a camera boom (pulls in towards the player if there is a collision)
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(RootComponent);
+	CameraBoom->TargetArmLength = 300.0f; // The camera follows at this distance behind the character	
+	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
+
+	// Create a follow camera
+	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
+	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
+	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+
+	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
+	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
 }
 
-void ATimeKeeper::BeginPlay()
+//////////////////////////////////////////////////////////////////////////
+// Input
+
+void ASteamforgeCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
-    Super::BeginPlay();
-    LoadTimeMarkers();
-    LoadGameTime();
-    UE_LOG(LogTemp, Log, TEXT("TimeKeeper Initialized: %s"), *CurrentTime.ToString());
+	// Set up gameplay key bindings
+	check(PlayerInputComponent);
+	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ACharacter::Jump);
+	PlayerInputComponent->BindAction("Jump", IE_Released, this, &ACharacter::StopJumping);
+
+	PlayerInputComponent->BindAxis("MoveForward", this, &ASteamforgeCharacter::MoveForward);
+	PlayerInputComponent->BindAxis("MoveRight", this, &ASteamforgeCharacter::MoveRight);
+
+	// We have 2 versions of the rotation bindings to handle different kinds of devices differently
+	// "turn" handles devices that provide an absolute delta, such as a mouse.
+	// "turnrate" is for devices that we choose to treat as a rate of change, such as an analog joystick
+	PlayerInputComponent->BindAxis("Turn", this, &APawn::AddControllerYawInput);
+	PlayerInputComponent->BindAxis("TurnRate", this, &ASteamforgeCharacter::TurnAtRate);
+	PlayerInputComponent->BindAxis("LookUp", this, &APawn::AddControllerPitchInput);
+	PlayerInputComponent->BindAxis("LookUpRate", this, &ASteamforgeCharacter::LookUpAtRate);
+
+	// handle touch devices
+	PlayerInputComponent->BindTouch(IE_Pressed, this, &ASteamforgeCharacter::TouchStarted);
+	PlayerInputComponent->BindTouch(IE_Released, this, &ASteamforgeCharacter::TouchStopped);
+
+	// VR headset functionality
+	PlayerInputComponent->BindAction("ResetVR", IE_Pressed, this, &ASteamforgeCharacter::OnResetVR);
 }
 
-void ATimeKeeper::Tick(float DeltaTime)
+
+void ASteamforgeCharacter::OnResetVR()
 {
-    Super::Tick(DeltaTime);
-
-    float ScaledDelta = DeltaTime * TimeScale;
-    int32 PreviousHour = CurrentTime.Hour;
-    int32 PreviousMinute = CurrentTime.Minute;
-
-    CurrentTime.AdvanceTime(ScaledDelta);
-
-    if (CurrentTime.Hour != PreviousHour || CurrentTime.Minute != PreviousMinute)
-    {
-        ProcessTimeEvents();
-    }
+	// If Steamforge is added to a project via 'Add Feature' in the Unreal Editor the dependency on HeadMountedDisplay in Steamforge.Build.cs is not automatically propagated
+	// and a linker error will result.
+	// You will need to either:
+	//		Add "HeadMountedDisplay" to [YourProject].Build.cs PublicDependencyModuleNames in order to build successfully (appropriate if supporting VR).
+	// or:
+	//		Comment or delete the call to ResetOrientationAndPosition below (appropriate if not supporting VR)
+	UHeadMountedDisplayFunctionLibrary::ResetOrientationAndPosition();
 }
 
-void ATimeKeeper::LoadTimeMarkers()
+void ASteamforgeCharacter::TouchStarted(ETouchIndex::Type FingerIndex, FVector Location)
 {
-    LoadedTimeMarkers.Empty();
-
-    if (!TimeMarkerTable) return;
-
-    static const FString ContextString(TEXT("Time Marker Context"));
-    TArray<FTimeMarkerEvent*> Rows;
-    TimeMarkerTable->GetAllRows(ContextString, Rows);
-
-    for (FTimeMarkerEvent* Row : Rows)
-    {
-        if (Row)
-        {
-            LoadedTimeMarkers.Add(*Row);
-        }
-    }
+		Jump();
 }
 
-void ATimeKeeper::ProcessTimeEvents()
+void ASteamforgeCharacter::TouchStopped(ETouchIndex::Type FingerIndex, FVector Location)
 {
-    for (const FTimeMarkerEvent& Marker : LoadedTimeMarkers)
-    {
-        bool bShouldFire = false;
-
-        if (Marker.Hour == CurrentTime.Hour && Marker.Minute == CurrentTime.Minute)
-        {
-            if (Marker.bIsDaily)
-            {
-                bShouldFire = true;
-            }
-            else if (Marker.bIsWeekly && Marker.DayOfWeek == CurrentTime.DayOfWeek)
-            {
-                bShouldFire = true;
-            }
-        }
-
-        if (bShouldFire)
-        {
-            OnTimeMarker.Broadcast(Marker.EventID);
-            UE_LOG(LogTemp, Log, TEXT("Time Event Triggered: %s at %02d:%02d"), *Marker.EventName, Marker.Hour, Marker.Minute);
-        }
-    }
+		StopJumping();
 }
 
-void ATimeKeeper::SaveGameTime()
+void ASteamforgeCharacter::TurnAtRate(float Rate)
 {
-    USteamforgeSaveGame* SaveGameInstance = Cast<USteamforgeSaveGame>(UGameplayStatics::CreateSaveGameObject(USteamforgeSaveGame::StaticClass()));
-    if (SaveGameInstance)
-    {
-        SaveGameInstance->SavedTime = CurrentTime;
-        UGameplayStatics::SaveGameToSlot(SaveGameInstance, TEXT("TimeKeeperSaveSlot"), 0);
-    }
+	// calculate delta for this frame from the rate information
+	AddControllerYawInput(Rate * BaseTurnRate * GetWorld()->GetDeltaSeconds());
 }
 
-void ATimeKeeper::LoadGameTime()
+void ASteamforgeCharacter::LookUpAtRate(float Rate)
 {
-    if (UGameplayStatics::DoesSaveGameExist(TEXT("TimeKeeperSaveSlot"), 0))
-    {
-        USteamforgeSaveGame* LoadedGame = Cast<USteamforgeSaveGame>(UGameplayStatics::LoadGameFromSlot(TEXT("TimeKeeperSaveSlot"), 0));
-        if (LoadedGame)
-        {
-            CurrentTime = LoadedGame->SavedTime;
-        }
-    }
+	// calculate delta for this frame from the rate information
+	AddControllerPitchInput(Rate * BaseLookUpRate * GetWorld()->GetDeltaSeconds());
 }
 
-// --- FGameDateTime Implementation ---
-
-void FGameDateTime::AdvanceTime(float GameSeconds)
+void ASteamforgeCharacter::MoveForward(float Value)
 {
-    AccumulatedTime += GameSeconds;
-    int32 TotalMinutesToAdd = static_cast<int32>(AccumulatedTime / 60.0f);
-    AccumulatedTime -= TotalMinutesToAdd * 60.0f;
+	if ((Controller != nullptr) && (Value != 0.0f))
+	{
+		// find out which way is forward
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-    Minute += TotalMinutesToAdd;
-    while (Minute >= MinutesPerHour)
-    {
-        Minute -= MinutesPerHour;
-        Hour++;
-    }
-
-    while (Hour >= HoursPerDay)
-    {
-        Hour -= HoursPerDay;
-        AdvanceOneDay();
-    }
+		// get forward vector
+		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+		AddMovementInput(Direction, Value);
+	}
 }
 
-void FGameDateTime::AdvanceOneDay()
+void ASteamforgeCharacter::MoveRight(float Value)
 {
-    DayOfMonth++;
-    DayOfWeek = static_cast<EGameDay>((static_cast<uint8>(DayOfWeek) + 1) % DaysPerWeek);
-
-    if (DayOfMonth > DaysPerMonth)
-    {
-        DayOfMonth = 1;
-        Month = static_cast<EGameMonth>((static_cast<uint8>(Month) + 1) % MonthsPerYear);
-
-        if (Month == EGameMonth::Kindlemoon)
-        {
-            Year++;
-        }
-    }
-}
-
-FString FGameDateTime::GetFormattedTime() const
-{
-    FString Suffix = (Hour >= 12) ? TEXT("PM") : TEXT("AM");
-    int32 DisplayHour = (Hour == 0) ? 12 : (Hour > 12 ? Hour - 12 : Hour);
-    return FString::Printf(TEXT("%02d:%02d %s"), DisplayHour, Minute, *Suffix);
-}
-
-FString FGameDateTime::ToString() const
-{
-    const UEnum* DayEnum = StaticEnum<EGameDay>();
-    const UEnum* MonthEnum = StaticEnum<EGameMonth>();
-    FString DayStr = DayEnum ? DayEnum->GetDisplayNameTextByValue((int64)DayOfWeek).ToString() : TEXT("UnknownDay");
-    FString MonthStr = MonthEnum ? MonthEnum->GetDisplayNameTextByValue((int64)Month).ToString() : TEXT("UnknownMonth");
-
-    return FString::Printf(TEXT("%s, %d of %s, Year %d - %s"), *DayStr, DayOfMonth, *MonthStr, Year, *GetFormattedTime());
+	if ( (Controller != nullptr) && (Value != 0.0f) )
+	{
+		// find out which way is right
+		const FRotator Rotation = Controller->GetControlRotation();
+		const FRotator YawRotation(0, Rotation.Yaw, 0);
+	
+		// get right vector 
+		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		// add movement in that direction
+		AddMovementInput(Direction, Value);
+	}
 }
