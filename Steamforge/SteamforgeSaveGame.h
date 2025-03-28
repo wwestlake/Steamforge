@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
-#include "TimeKeeper.h" // For FGameDateTime
 #include "SteamforgeSaveGame.generated.h"
 
 UCLASS()
@@ -12,5 +11,5 @@ class STEAMFORGE_API USteamforgeSaveGame : public USaveGame
 
 public:
     UPROPERTY(BlueprintReadWrite, SaveGame)
-    FGameDateTime SavedTime;
+    float stubValue = 0.0;
 };
