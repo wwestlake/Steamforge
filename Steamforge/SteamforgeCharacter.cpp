@@ -45,6 +45,18 @@ ASteamforgeCharacter::ASteamforgeCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named MyCharacter (to avoid direct content references in C++)
+
+	// Create a scene capture component
+	SceneCapture = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("SceneCapture"));
+	SceneCapture->SetupAttachment(RootComponent);
+
+	// Set relative position above the character
+	SceneCapture->SetRelativeLocation(FVector(0.f, 0.f, 3000.f));
+	SceneCapture->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+
+	// Set field of view
+	SceneCapture->FOVAngle = 60.f;
+
 }
 
 //////////////////////////////////////////////////////////////////////////

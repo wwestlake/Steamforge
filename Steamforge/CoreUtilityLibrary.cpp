@@ -32,3 +32,32 @@ FString UCoreUtilityLibrary::PadLeft(const FString& Input, int32 TotalWidth, con
     const TCHAR Pad = (!PadChar.IsEmpty()) ? PadChar[0] : TEXT('0');
     return FString::ChrN(PadCount, Pad) + Input;
 }
+
+FString UCoreUtilityLibrary::DegreesToCardinal(float Degrees)
+{
+	// Normalize to 0–360
+	Degrees = FMath::Fmod(Degrees, 360.0f);
+	if (Degrees < 0.0f)
+		Degrees += 360.0f;
+
+	static const TArray<FString> Directions = {
+		TEXT("N"), TEXT("NE"), TEXT("E"), TEXT("SE"),
+		TEXT("S"), TEXT("SW"), TEXT("W"), TEXT("NW")
+	};
+
+	// Offset by 22.5 degrees to center each segment
+	int32 Index = FMath::RoundToInt(Degrees / 45.0f) % 8;
+
+	return Directions[Index];
+}
+
+UStatsComponent* UCoreUtilityLibrary::GetStatsComponentFromActor(AActor* TargetActor)
+{
+	if (!TargetActor)
+	{
+		return nullptr;
+	}
+
+	// Look for the component on the actor
+	return TargetActor->FindComponentByClass<UStatsComponent>();
+}

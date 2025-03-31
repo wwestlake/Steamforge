@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include "Engine/SceneCapture2D.h"
+#include "Camera/CameraComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "SteamforgeCharacter.generated.h"
@@ -28,6 +31,9 @@ public:
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category=Camera)
 	float BaseLookUpRate;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Minimap")
+	USceneCaptureComponent2D* SceneCapture;
 
 protected:
 

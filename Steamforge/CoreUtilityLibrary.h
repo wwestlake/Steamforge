@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "StatsComponent.h"
 #include "CoreUtilityLibrary.generated.h"
 
 /**
@@ -35,5 +36,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "String Utilities")
 	static FString PadLeft(const FString& Input, int32 TotalWidth, const FString& PadChar = TEXT("0"));
 
-	
+	/** Converts an angle in degrees to a cardinal direction (N, NE, E, etc.) */
+	UFUNCTION(BlueprintPure, Category = "Direction Utilities")
+	static FString DegreesToCardinal(float Degrees);
+
+	UFUNCTION(BlueprintPure, Category = "Stats")
+	static UStatsComponent* GetStatsComponentFromActor(AActor* TargetActor);
+
+
 };
